@@ -233,7 +233,7 @@ option{background:var(--surface);}
     <div class="step-label"><span class="step-label-left"><span class="step-num">4</span> Filtrar por Escala do Dia</span></div>
     <div class="btn-group">
       <button class="btn active" id="btn-ALL"  onclick="selectType('ALL')">TODOS</button>
-      <button class="btn"        id="btn-X"    onclick="selectType('X')">ESCALADOS</button>
+      <button class="btn"        id="btn-X"    onclick="selectType('X')">Escalados</button>
       <button class="btn"        id="btn-DSR"  onclick="selectType('DSR')">DSR</button>
       <button class="btn"        id="btn-SUSP" onclick="selectType('SUSP.')">SUSP.</button>
     </div>
@@ -407,34 +407,85 @@ function populateSheetSelect() {
 
 
 function saveXlsxToFirebase(filename) {
+  setSaveState('saving', 'salvando base...');
   var meta = { filename: filename, updatedAt: new Date().toISOString(), sheets: Object.keys(ESCALA_DATA) };
+  // Save metadata
   fetch(FB_URL + '/metadata.json', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(meta)
   }).catch(function() {});
+  // Save full ESCALA_DATA sheet by sheet (Firebase has 10MB limit per node)
+  var promises = Object.keys(ESCALA_DATA).map(function(sheetName) {
+    var key = sheetName.replace(/[.#$\[\]]/g, '_');
+    return fetch(FB_URL + '/escalas/' + key + '.json', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ESCALA_DATA[sheetName])
+    });
+  });
+  Promise.all(promises)
+    .then(function() { setSaveState('saved', 'base salva na nuvem ✓'); })
+    .catch(function() { setSaveState('error', 'erro ao salvar base'); });
+}
+
+function loadEscalaFromFirebase(callback) {
+  setSaveState('saving', 'carregando base...');
+  fetch(FB_URL + '/escalas.json', { cache: 'no-cache' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data && typeof data === 'object' && Object.keys(data).length > 0) {
+        var loaded = {};
+        Object.keys(data).forEach(function(key) {
+          // Restore original sheet name (underscores back to original — keep as-is, names match)
+          loaded[key] = data[key];
+        });
+        ESCALA_DATA = loaded;
+        setSaveState('saved', 'base carregada da nuvem ✓');
+        callback(true);
+      } else {
+        callback(false);
+      }
+    })
+    .catch(function() { callback(false); });
+}
+
+function finishLoad() {
+  var loaded = Object.keys(ESCALA_DATA).length;
+  document.getElementById('loadingOverlay').classList.add('hidden');
+  document.getElementById('fileBadge').textContent = '✓ ' + loaded + ' guias';
+  populateSheetSelect();
+  var firstSheet = Object.keys(ESCALA_DATA)[0];
+  if (firstSheet) {
+    document.getElementById('sheetSelect').value = firstSheet;
+    selectedSheet = firstSheet;
+  }
+  var dm = {0:'DOM',1:'SEG',2:'TER',3:'QUA',4:'QUI',5:'SEX',6:'SAB'};
+  selectDay(dm[new Date().getDay()]);
 }
 
 function loadEmbedded() {
-  try {
-    var wb     = XLSX.read(XLSX_B64, { type:'base64' });
-    var loaded = processWorkbook(wb);
-    document.getElementById('loadingOverlay').classList.add('hidden');
-    document.getElementById('fileBadge').textContent = '✓ ' + loaded + ' guias';
-    document.getElementById('lastSync').textContent  = loaded + ' guias carregadas';
-    populateSheetSelect();
-    // Auto-select first sheet
-    var firstSheet = Object.keys(ESCALA_DATA)[0];
-    if (firstSheet) {
-      document.getElementById('sheetSelect').value = firstSheet;
-      selectedSheet = firstSheet;
+  document.getElementById('loadingSub').textContent = 'Verificando nuvem...';
+  // Try Firebase first
+  loadEscalaFromFirebase(function(found) {
+    if (found) {
+      var loaded = Object.keys(ESCALA_DATA).length;
+      document.getElementById('lastSync').textContent = 'Base carregada da nuvem — ' + loaded + ' guias';
+      finishLoad();
+    } else {
+      // Fallback to embedded xlsx
+      try {
+        document.getElementById('loadingSub').textContent = 'Carregando base local...';
+        var wb = XLSX.read(XLSX_B64, { type:'base64' });
+        processWorkbook(wb);
+        document.getElementById('lastSync').textContent = Object.keys(ESCALA_DATA).length + ' guias (base local)';
+        finishLoad();
+      } catch(e) {
+        document.getElementById('loadingOverlay').classList.add('hidden');
+        console.error(e);
+      }
     }
-    var dm = {0:'DOM',1:'SEG',2:'TER',3:'QUA',4:'QUI',5:'SEX',6:'SAB'};
-    selectDay(dm[new Date().getDay()]);
-  } catch(e) {
-    document.getElementById('loadingOverlay').classList.add('hidden');
-    console.error(e);
-  }
+  });
 }
 
 function handleFileUpload(event) {
@@ -452,8 +503,15 @@ function handleFileUpload(event) {
       document.getElementById('lastSync').textContent  = file.name + ' — ' + loaded + ' guias';
       presencaMap = {}; selectedSheet = '';
       document.getElementById('lista-section').style.display = 'none';
-      populateSheetSelect();
       saveXlsxToFirebase(file.name);
+      populateSheetSelect();
+      var firstSheet = Object.keys(ESCALA_DATA)[0];
+      if (firstSheet) {
+        document.getElementById('sheetSelect').value = firstSheet;
+        selectedSheet = firstSheet;
+        updateTurnoCounts();
+        refreshLista();
+      }
     } catch(err) {
       document.getElementById('loadingOverlay').classList.add('hidden');
       alert('Erro: ' + err.message);
