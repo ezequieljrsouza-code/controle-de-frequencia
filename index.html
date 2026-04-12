@@ -231,7 +231,7 @@ option{background:var(--surface);}
     <div class="step-label"><span class="step-label-left"><span class="step-num">4</span> Filtrar por Escala do Dia</span></div>
     <div class="btn-group">
       <button class="btn active" id="btn-ALL"  onclick="selectType('ALL')">TODOS</button>
-      <button class="btn"        id="btn-X"    onclick="selectType('X')">Presentes</button>
+      <button class="btn"        id="btn-X"    onclick="selectType('X')">Escalados</button>
       <button class="btn"        id="btn-DSR"  onclick="selectType('DSR')">DSR</button>
       <button class="btn"        id="btn-SUSP" onclick="selectType('SUSP.')">SUSP.</button>
     </div>
@@ -748,7 +748,7 @@ function renderStats() {
   var absReal = Math.max(0, a - pl);
   document.getElementById('statsRow').innerHTML =
     '<div class="stat-box"><div class="stat-val stat-blue">'+all.length+'</div><div class="stat-lbl">Total</div></div>'
-    +'<div class="stat-box"><div class="stat-val stat-green">'+esc+'</div><div class="stat-lbl">Escalados</div></div>'
+    +'<div class="stat-box"><div class="stat-val stat-green">'+esc+'</div><div class="stat-lbl"></div></div>'
     +'<div class="stat-box"><div class="stat-val stat-red">'+a+'</div><div class="stat-lbl">ABS</div></div>'
     +'<div class="stat-box"><div class="stat-val stat-teal">'+absReal+'</div><div class="stat-lbl">ABS Real</div></div>';
 }
