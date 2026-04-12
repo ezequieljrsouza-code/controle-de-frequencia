@@ -522,19 +522,34 @@ function handleFileUpload(event) {
 }
 
 // ── UI ────────────────────────────────────────────────────────────────────────
+var presencaCache = {}; // stores presencaMap per fbKey
+
 function onSheetChange() {
+  // Save current presencaMap before switching
+  if (selectedSheet && selectedDay) {
+    presencaCache[fbKey()] = presencaMap;
+  }
   selectedSheet = document.getElementById('sheetSelect').value;
-  presencaMap   = {};
+  // Restore cached presencaMap for new context (if visited before this session)
+  var key = fbKey();
+  presencaMap = presencaCache[key] ? presencaCache[key] : {};
   updateTurnoCounts();
   refreshLista();
 }
 
 function selectDay(day) {
+  // Save current presencaMap before switching day
+  if (selectedSheet && selectedDay) {
+    presencaCache[fbKey()] = presencaMap;
+  }
   selectedDay = day;
   document.querySelectorAll('#dayButtons .btn').forEach(function(b) {
     b.classList.remove('active');
     if (b.textContent.trim() === day) b.classList.add('active');
   });
+  // Restore cached presencaMap for new context
+  var key = fbKey();
+  presencaMap = presencaCache[key] ? presencaCache[key] : {};
   updateTurnoCounts();
   refreshLista();
 }
@@ -587,9 +602,21 @@ function refreshLista() {
     document.getElementById('lista-section').style.display = 'none';
     return;
   }
-  // Load from Firebase first, then render
+  var key = fbKey();
+  // If already cached in session, render immediately without Firebase round-trip
+  if (presencaCache[key] !== undefined) {
+    presencaMap = presencaCache[key];
+    document.getElementById('lista-section').style.display = 'block';
+    document.getElementById('searchInput').value = '';
+    updateTurnoCounts();
+    renderPessoas();
+    setSaveState('saved', 'pronto');
+    return;
+  }
+  // First visit for this key — load from Firebase
   setSaveState('saving', 'carregando...');
   loadFromFirebase(function() {
+    presencaCache[key] = presencaMap; // cache after load
     document.getElementById('lista-section').style.display = 'block';
     document.getElementById('searchInput').value = '';
     updateTurnoCounts();
