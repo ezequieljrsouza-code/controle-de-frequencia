@@ -201,9 +201,7 @@ option{background:var(--surface);}
 
   <div class="step">
     <div class="step-label"><span class="step-label-left"><span class="step-num">1</span> Selecionar Guia</span></div>
-    <select class="sheet-select" id="sheetSelect" onchange="onSheetChange()">
-      <option value="">— Escolha uma guia —</option>
-    </select>
+    <div class="btn-group" id="sheetButtons"></div>
   </div>
 
   <div class="step">
@@ -392,17 +390,32 @@ function processWorkbook(wb) {
 }
 
 function populateSheetSelect() {
-  var sel = document.getElementById('sheetSelect');
-  var prev = selectedSheet;
-  sel.innerHTML = '<option value="">— Escolha uma guia —</option>';
+  var container = document.getElementById('sheetButtons');
+  container.innerHTML = '';
   Object.keys(ESCALA_DATA).forEach(function(name) {
-    var opt = document.createElement('option');
-    opt.value = name;
-    opt.textContent = name + '  (' + ESCALA_DATA[name].length + ' pessoas)';
-    if (name === prev) opt.selected = true;
-    sel.appendChild(opt);
+    var btn = document.createElement('button');
+    btn.className = 'btn sheet-btn' + (name === selectedSheet ? ' active' : '');
+    btn.setAttribute('data-sheet', name);
+    btn.textContent = name;
+    btn.onclick = function() { selectSheet(name); };
+    container.appendChild(btn);
   });
-  sel.disabled = false;
+}
+
+function selectSheet(name) {
+  // Save current presencaMap before switching
+  if (selectedSheet && selectedDay) {
+    presencaCache[fbKey()] = presencaMap;
+  }
+  selectedSheet = name;
+  // Update button states
+  document.querySelectorAll('.sheet-btn').forEach(function(b) {
+    b.classList.toggle('active', b.getAttribute('data-sheet') === name);
+  });
+  var key = fbKey();
+  presencaMap = presencaCache[key] ? presencaCache[key] : {};
+  updateTurnoCounts();
+  refreshLista();
 }
 
 
@@ -457,7 +470,6 @@ function finishLoad() {
   populateSheetSelect();
   var firstSheet = Object.keys(ESCALA_DATA)[0];
   if (firstSheet) {
-    document.getElementById('sheetSelect').value = firstSheet;
     selectedSheet = firstSheet;
   }
   var dm = {0:'DOM',1:'SEG',2:'TER',3:'QUA',4:'QUI',5:'SEX',6:'SAB'};
@@ -507,7 +519,6 @@ function handleFileUpload(event) {
       populateSheetSelect();
       var firstSheet = Object.keys(ESCALA_DATA)[0];
       if (firstSheet) {
-        document.getElementById('sheetSelect').value = firstSheet;
         selectedSheet = firstSheet;
         updateTurnoCounts();
         refreshLista();
@@ -525,16 +536,7 @@ function handleFileUpload(event) {
 var presencaCache = {}; // stores presencaMap per fbKey
 
 function onSheetChange() {
-  // Save current presencaMap before switching
-  if (selectedSheet && selectedDay) {
-    presencaCache[fbKey()] = presencaMap;
-  }
-  selectedSheet = document.getElementById('sheetSelect').value;
-  // Restore cached presencaMap for new context (if visited before this session)
-  var key = fbKey();
-  presencaMap = presencaCache[key] ? presencaCache[key] : {};
-  updateTurnoCounts();
-  refreshLista();
+  // Legacy — now handled by selectSheet()
 }
 
 function selectDay(day) {
@@ -850,7 +852,7 @@ function syncFromSheets() {
     populateSheetSelect();
     // auto-select first
     var first = Object.keys(ESCALA_DATA)[0];
-    if (first) { document.getElementById('sheetSelect').value=first; selectedSheet=first; updateTurnoCounts(); refreshLista(); }
+    if (first) { selectedSheet=first; updateTurnoCounts(); refreshLista(); }
   });
 }
 
