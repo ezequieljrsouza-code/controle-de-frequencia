@@ -100,6 +100,7 @@ option{background:var(--surface);}
 .pessoa-row.t3{border-left-color:var(--orange);}
 .pessoa-row.pulmao-row{border-left-color:var(--teal)!important;background:#0a1f1e;}
 [data-theme="light"] .pessoa-row.pulmao-row{background:#f0fdf9;}
+[data-theme="light"] .pessoa-row.presente{background:#f0fdf4;}
 .pessoa-row.ausente{background:#1f0a0a;border-left-color:var(--red)!important;}
 [data-theme="light"] .pessoa-row.ausente{background:#fef2f2;}
 
@@ -125,6 +126,11 @@ option{background:var(--surface);}
 .abs-btn{font-family:var(--mono);font-size:10px;font-weight:700;padding:5px 10px;border-radius:5px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;transition:all 0.12s;flex-shrink:0;}
 .abs-btn:hover{border-color:var(--red);color:var(--red);}
 .abs-btn.marked{background:var(--red);border-color:var(--red);color:#fff;}
+
+/* P (presente) button */
+.p-btn{font-family:var(--mono);font-size:10px;font-weight:700;padding:5px 10px;border-radius:5px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;transition:all 0.12s;flex-shrink:0;}
+.p-btn:hover{border-color:var(--green);color:var(--green);}
+.p-btn.marked{background:var(--green);border-color:var(--green);color:#fff;}
 
 /* justificativa */
 .just-select{font-family:var(--mono);font-size:10px;background:var(--bg);border:1px solid var(--border2);color:var(--text2);border-radius:4px;padding:3px 5px;cursor:pointer;max-width:85px;flex-shrink:0;}
@@ -308,9 +314,8 @@ function saveToFirebase() {
   var data = {};
   Object.keys(presencaMap).forEach(function(k) {
     var e = presencaMap[k];
-    if (e && e.status === 'A') {
-      // Only save ABS entries
-      data[k.replace(/[.#$\[\]]/g, '_')] = { just: e.just || 'Injustificado' };
+    if (e && (e.status === 'A' || e.status === 'P')) {
+      data[k.replace(/[.#$\[\]]/g, '_')] = { status: e.status, just: e.just || 'Injustificado' };
     }
   });
 
@@ -335,7 +340,7 @@ function loadFromFirebase(callback) {
       if (data && typeof data === 'object') {
         Object.keys(data).forEach(function(k) {
           // Restore original key (we saved with _ replacing special chars)
-          presencaMap[k] = { status: 'A', just: data[k].just || 'Injustificado' };
+          presencaMap[k] = { status: data[k].status || 'A', just: data[k].just || 'Injustificado' };
         });
       }
       callback(presencaMap);
@@ -694,6 +699,7 @@ function renderPessoas() {
     var tCls   = turno==='T2'?'tag-t2':turno==='T3'?'tag-t3':'tag-t1';
     var rowCls = turno.toLowerCase();
     if (p.pulmao)            rowCls += ' pulmao-row';
+    if (estado.status==='P') rowCls += ' presente';
     if (estado.status==='A') rowCls += ' ausente';
 
     var justHtml = '';
@@ -705,6 +711,7 @@ function renderPessoas() {
     }
 
     var isAbs = estado.status === 'A';
+    var isP   = estado.status === 'P';
     var div = document.createElement('div');
     div.className = 'pessoa-row ' + rowCls;
     div.innerHTML =
@@ -715,10 +722,21 @@ function renderPessoas() {
       +'<span class="pessoa-tag '+tagCls+'">'+dayVal+'</span>'
       +'</div>'
       +justHtml
-      +'<button class="abs-btn'+(isAbs?' marked':'')+'" data-key="'+key+'" onclick="toggleAbs(this)">ABS</button>';
+      +'<div style="display:flex;gap:4px;flex-shrink:0">'
+      +'<button class="p-btn'+(isP?' marked':'')+'" data-key="'+key+'" onclick="toggleP(this)">P</button>'
+      +'<button class="abs-btn'+(isAbs?' marked':'')+'" data-key="'+key+'" onclick="toggleAbs(this)">ABS</button>'
+      +'</div>';
     list.appendChild(div);
   });
   renderStats();
+}
+
+function toggleP(btn) {
+  var key = btn.getAttribute('data-key');
+  if (!presencaMap[key]) presencaMap[key] = { status: null, just: 'Injustificado' };
+  presencaMap[key].status = presencaMap[key].status === 'P' ? null : 'P';
+  scheduleFirebaseSave();
+  renderPessoas();
 }
 
 function toggleAbs(btn) {
@@ -742,6 +760,7 @@ function renderStats() {
   all.forEach(function(x) {
     var e = presencaMap[x.nome];
     if (e && e.status==='A') a++;
+    else if (e && e.status==='P') esc++;
     else esc++;
     if (x.pulmao) pl++;
   });
