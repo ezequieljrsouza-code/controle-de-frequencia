@@ -629,7 +629,11 @@ function updateTurnoCounts() {
   if (!selectedSheet || !ESCALA_DATA[selectedSheet]) return;
   var counts = { ALL:0, T1:0, T2:0, T3:0 };
   ESCALA_DATA[selectedSheet].forEach(function(p) {
-    if (selectedDay && selectedType!=='ALL' && (p.days[selectedDay]||'')!==selectedType) return;
+    if (selectedDay && selectedType!=='ALL') {
+      var dv = p.days[selectedDay]||'';
+      var match = selectedType==='X' ? (dv==='X'||dv==='O') : dv===selectedType;
+      if (!match) return;
+    }
     counts.ALL++;
     var t = (p.turno||'').toUpperCase();
     if (counts[t]!==undefined) counts[t]++;
@@ -671,8 +675,15 @@ function refreshLista() {
 function getPessoas() {
   return (ESCALA_DATA[selectedSheet]||[]).filter(function(p) {
     var val = p.days[selectedDay]||'';
-    return (selectedTurno==='ALL'||(p.turno||'').toUpperCase()===selectedTurno)
-        && (selectedType ==='ALL'||val===selectedType);
+    var typeMatch;
+    if (selectedType === 'ALL') {
+      typeMatch = true;
+    } else if (selectedType === 'X') {
+      typeMatch = val === 'X' || val === 'O'; // O = also escalado
+    } else {
+      typeMatch = val === selectedType;
+    }
+    return (selectedTurno==='ALL'||(p.turno||'').toUpperCase()===selectedTurno) && typeMatch;
   });
 }
 
