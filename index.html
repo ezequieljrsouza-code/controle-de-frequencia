@@ -239,7 +239,7 @@ option{background:var(--surface);}
       <button class="btn active" id="btn-ALL"  onclick="selectType('ALL')">TODOS</button>
       <button class="btn active-green"        id="btn-X"    onclick="selectType('X')">Escalados</button>
       <button class="btn"        id="btn-DSR"  onclick="selectType('DSR')">DSR</button>
-      <button class="btn"        id="btn-SUSP" onclick="selectType('SUSP.')">SUSP.</button>
+      <button class="btn"        id="btn-SUSP" onclick="selectType('SUSP')">SUSP</button>
     </div>
   </div>
 
@@ -673,15 +673,15 @@ function selectTurno(t) {
 
 function selectType(type) {
   selectedType = type;
-  ['ALL','X','DSR','SUSP.'].forEach(function(t) {
-    var id = t==='SUSP.'?'btn-SUSP':'btn-'+t;
+  ['ALL','X','DSR','SUSP'].forEach(function(t) {
+    var id = t==='SUSP'?'btn-SUSP':'btn-'+t;
     var el = document.getElementById(id);
     if (!el) return;
     el.classList.remove('active','active-green','active-yellow','active-red');
     if (t===type) {
       if (t==='X') el.classList.add('active-green');
       else if (t==='DSR') el.classList.add('active-yellow');
-      else if (t==='SUSP.') el.classList.add('active-red');
+      else if (t==='SUSP') el.classList.add('active-red');
       else el.classList.add('active');
     }
   });
@@ -769,7 +769,7 @@ function renderPessoas() {
     var estado = presencaMap[key] || { status: null, just: 'Injustificado' };
     var dayVal = p.days[selectedDay]||'';
     var turno  = (p.turno||'').toUpperCase();
-    var tagCls = dayVal==='DSR'?'tag-dsr':dayVal==='SUSP.'?'tag-susp':dayVal==='O'?'tag-o':'tag-x';
+    var tagCls = dayVal==='DSR'?'tag-dsr':dayVal==='SUSP'?'tag-susp':dayVal==='O'?'tag-o':'tag-x';
     var tCls   = turno==='T2'?'tag-t2':turno==='T3'?'tag-t3':'tag-t1';
     var rowCls = turno.toLowerCase();
     if (p.pulmao)            rowCls += ' pulmao-row';
