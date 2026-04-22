@@ -93,7 +93,7 @@ option{background:var(--surface);}
 /* PESSOA LIST */
 .pessoa-list{margin-top:12px;display:flex;flex-direction:column;gap:8px;}
 
-/* Card: empilha em 2 linhas no mobile */
+/* Card: 2 linhas no mobile — nome em cima, controles embaixo */
 .pessoa-row{display:flex;flex-direction:column;gap:6px;background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--border);border-radius:8px;padding:10px 12px;transition:all 0.15s;}
 .pessoa-row:hover{background:var(--card-hover);}
 .pessoa-row.t1{border-left-color:var(--cyan);}
@@ -105,10 +105,10 @@ option{background:var(--surface);}
 .pessoa-row.ausente{background:#1f0a0a;border-left-color:var(--red)!important;}
 [data-theme="light"] .pessoa-row.ausente{background:#fef2f2;}
 
-/* Nome: linha 1, sempre completo */
+/* Nome: linha 1 — sempre visível por completo */
 .pessoa-nome{font-size:15px;font-weight:700;color:var(--text);line-height:1.3;word-break:break-word;white-space:normal;}
 
-/* Linha 2: tags + justificativa + botões */
+/* Linha 2: tags + justificativa + botões, sem sobreposição */
 .pessoa-controls{display:flex;flex-wrap:wrap;align-items:center;gap:6px;}
 .tags{display:flex;gap:3px;align-items:center;flex-shrink:0;}
 .pessoa-tag{font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 5px;border-radius:3px;letter-spacing:0.5px;white-space:nowrap;}
@@ -242,8 +242,8 @@ option{background:var(--surface);}
   <div class="step">
     <div class="step-label"><span class="step-label-left"><span class="step-num">4</span> Filtrar por Escala do Dia</span></div>
     <div class="btn-group">
-      <button class="btn active" id="btn-ALL"  onclick="selectType('ALL')">TODOS</button>
-      <button class="btn"        id="btn-X"    onclick="selectType('X')">Escalados</button>
+      <button class="btn" id="btn-ALL"  onclick="selectType('ALL')">TODOS</button>
+      <button class="btn active-green"        id="btn-X"    onclick="selectType('X')">Escalados</button>
       <button class="btn"        id="btn-DSR"  onclick="selectType('DSR')">DSR</button>
       <button class="btn"        id="btn-SUSP" onclick="selectType('SUSP')">SUSP</button>
     </div>
@@ -461,6 +461,27 @@ function saveXlsxToFirebase(filename) {
   .catch(function() { setSaveState('error', 'erro ao salvar base'); });
 }
 
+// Salva XLSX completo como base64 no Firebase (chunks de 500KB)
+function saveXlsxB64ToFirebase(b64string, filename) {
+  var CHUNK = 500000;
+  var chunks = [];
+  for (var i = 0; i < b64string.length; i += CHUNK) { chunks.push(b64string.slice(i, i + CHUNK)); }
+  fetch(FB_URL + '/xlsxFile.json', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: filename, chunks: chunks, total: chunks.length, updatedAt: new Date().toISOString() })
+  }).then(function() { XLSX_B64 = b64string; }).catch(function(e) { console.warn('Erro XLSX_B64:', e); });
+}
+
+// Carrega XLSX_B64 do Firebase
+function loadXlsxB64FromFirebase(callback) {
+  fetch(FB_URL + '/xlsxFile.json', { cache: 'no-cache' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data && data.chunks && Array.isArray(data.chunks)) { callback(data.chunks.join(''), data.filename || 'firebase.xlsx'); }
+      else { callback(null, null); }
+    }).catch(function() { callback(null, null); });
+}
+
 function loadEscalaFromFirebase(callback) {
   setSaveState('saving', 'verificando nuvem...');
   // First check metadata to compare with embedded build
@@ -503,6 +524,7 @@ function finishLoad() {
   document.getElementById('loadingOverlay').classList.add('hidden');
   document.getElementById('fileBadge').textContent = '✓ ' + loaded + ' guias';
   populateSheetSelect();
+  selectType('X');
   var firstSheet = Object.keys(ESCALA_DATA)[0];
   if (firstSheet) {
     selectedSheet = firstSheet;
@@ -521,27 +543,38 @@ function loadEmbedded() {
     EMBEDDED_SHEETS = tempData;
   } catch(e) {}
   document.getElementById('loadingSub').textContent = 'Verificando nuvem...';
-  // Try Firebase first
+  // Tenta Firebase (dados estruturados) primeiro
   loadEscalaFromFirebase(function(found) {
     if (found) {
       var loaded = Object.keys(ESCALA_DATA).length;
       document.getElementById('lastSync').textContent = 'Base carregada da nuvem — ' + loaded + ' guias';
       finishLoad();
     } else {
-      // Fallback to embedded xlsx
-      try {
-        document.getElementById('loadingSub').textContent = 'Carregando base local...';
-        var wb = XLSX.read(XLSX_B64, { type:'base64' });
-        processWorkbook(wb);
-        // Store embedded sheet names for future version comparison
-        EMBEDDED_SHEETS = {};
-        Object.keys(ESCALA_DATA).forEach(function(k) { EMBEDDED_SHEETS[k] = true; });
-        document.getElementById('lastSync').textContent = Object.keys(ESCALA_DATA).length + ' guias (base local)';
-        finishLoad();
-      } catch(e) {
-        document.getElementById('loadingOverlay').classList.add('hidden');
-        console.error(e);
-      }
+      // Tenta XLSX_B64 do Firebase
+      document.getElementById('loadingSub').textContent = 'Verificando arquivo na nuvem...';
+      loadXlsxB64FromFirebase(function(b64, fname) {
+        if (b64) {
+          try {
+            document.getElementById('loadingSub').textContent = 'Carregando arquivo da nuvem...';
+            var wb = XLSX.read(b64, { type:'base64' });
+            processWorkbook(wb);
+            EMBEDDED_SHEETS = {};
+            Object.keys(ESCALA_DATA).forEach(function(k) { EMBEDDED_SHEETS[k] = true; });
+            document.getElementById('lastSync').textContent = (fname||'arquivo') + ' — ' + Object.keys(ESCALA_DATA).length + ' guias (nuvem)';
+            finishLoad(); return;
+          } catch(e) { console.warn('Erro XLSX Firebase:', e); }
+        }
+        // Fallback: xlsx embutido
+        try {
+          document.getElementById('loadingSub').textContent = 'Carregando base local...';
+          var wb = XLSX.read(XLSX_B64, { type:'base64' });
+          processWorkbook(wb);
+          EMBEDDED_SHEETS = {};
+          Object.keys(ESCALA_DATA).forEach(function(k) { EMBEDDED_SHEETS[k] = true; });
+          document.getElementById('lastSync').textContent = Object.keys(ESCALA_DATA).length + ' guias (base local)';
+          finishLoad();
+        } catch(e) { document.getElementById('loadingOverlay').classList.add('hidden'); console.error(e); }
+      });
     }
   });
 }
@@ -554,15 +587,19 @@ function handleFileUpload(event) {
   var reader = new FileReader();
   reader.onload = function(e) {
     try {
-      var wb     = XLSX.read(new Uint8Array(e.target.result), { type:'array' });
-      var loaded = processWorkbook(wb);
+      var arrayBuf = e.target.result;
+      var wb       = XLSX.read(new Uint8Array(arrayBuf), { type:'array' });
+      var loaded   = processWorkbook(wb);
       document.getElementById('loadingOverlay').classList.add('hidden');
       document.getElementById('fileBadge').textContent = '✓ ' + loaded + ' guias';
       document.getElementById('lastSync').textContent  = file.name + ' — ' + loaded + ' guias';
       presencaMap = {}; selectedSheet = '';
       document.getElementById('lista-section').style.display = 'none';
       saveXlsxToFirebase(file.name);
+      var b64 = btoa(String.fromCharCode.apply(null, new Uint8Array(arrayBuf)));
+      saveXlsxB64ToFirebase(b64, file.name);
       populateSheetSelect();
+      selectType('X');
       var firstSheet = Object.keys(ESCALA_DATA)[0];
       if (firstSheet) {
         selectedSheet = firstSheet;
@@ -923,8 +960,23 @@ function syncFromSheets() {
     btn.textContent = '✓ SHEETS';
     setTimeout(function(){ btn.textContent='↓ SHEETS'; },3000);
     saveXlsxToFirebase('google-sheets-sync');
+    // Gerar XLSX a partir dos dados e salvar como Base64 no Firebase
+    try {
+      var wbNew = XLSX.utils.book_new();
+      Object.keys(ESCALA_DATA).forEach(function(sn) {
+        var rows = ESCALA_DATA[sn]; if (!rows || !rows.length) return;
+        var header = ['NOME','TURNO','PRODUTIVO ?','SEG','TER','QUA','QUI','SEX','SAB','DOM'];
+        var wsData = [header];
+        rows.forEach(function(p) {
+          wsData.push([p.nome,p.turno,p.pulmao?'PULMÃO':'',
+            p.days.SEG||'',p.days.TER||'',p.days.QUA||'',p.days.QUI||'',p.days.SEX||'',p.days.SAB||'',p.days.DOM||''  ]);
+        });
+        XLSX.utils.book_append_sheet(wbNew, XLSX.utils.aoa_to_sheet(wsData), sn);
+      });
+      saveXlsxB64ToFirebase(XLSX.write(wbNew, { bookType:'xlsx', type:'base64' }), 'google-sheets-sync.xlsx');
+    } catch(e) { console.warn('Erro XLSX Sheets:', e); }
     populateSheetSelect();
-    // auto-select first
+    selectType('X');
     var first = Object.keys(ESCALA_DATA)[0];
     if (first) { selectedSheet=first; updateTurnoCounts(); refreshLista(); }
   });
@@ -939,7 +991,7 @@ function initTheme() {
 // ── INIT ─────────────────────────────────────────────────────────────────────
 initTheme();
 var dm = {0:'DOM',1:'SEG',2:'TER',3:'QUA',4:'QUI',5:'SEX',6:'SAB'};
-selectType('ALL');
+selectType('X');
 selectTurno('ALL');
 loadEmbedded();
 </script>
