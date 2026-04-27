@@ -849,7 +849,7 @@ function gerarRelatorio() {
     } else { if (st==='A') absN.push('- '+p.nome+' ('+just+')'); }
   });
   var absReal = Math.max(0, absN.length - plP);
-  var r = '*ABS ('+hoje+')*\n\nABS\n';
+  var r = '*ABS ('+hoje+')*\n\n';
   r += absN.length  ? absN.join('\n')+'\n'   : 'Nenhum\n';
   r += '\nPulmões 🫁\n';
   r += plList.length? plList.join('\n')+'\n' : 'Nenhum\n';
