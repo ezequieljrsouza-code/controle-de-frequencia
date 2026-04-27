@@ -245,7 +245,7 @@ option{background:var(--surface);}
       <button class="btn" id="btn-ALL"  onclick="selectType('ALL')">TODOS</button>
       <button class="btn active-green" id="btn-X"    onclick="selectType('X')">Escalados</button>
       <button class="btn"        id="btn-DSR"  onclick="selectType('DSR')">DSR</button>
-      <button class="btn"        id="btn-SUSP" onclick="selectType('SUSP.')">SUSP.</button>
+      <button class="btn"        id="btn-SUSP" onclick="selectType('SUSP')">SUSP</button>
     </div>
   </div>
 
@@ -396,10 +396,10 @@ function processWorkbook(wb) {
       var days  = {};
       Object.keys(dayIdx).forEach(function(d) {
         var rawVal = dayIdx[d] >= 0 ? row[dayIdx[d]] : '';
-        // Só aceita string — datas/números Excel viram vazio
+        // Normaliza maiúsculas; rejeita datas/números Excel (viram vazio)
         var val = (typeof rawVal === 'string') ? rawVal.trim().toUpperCase() : '';
-        // Correção: se coluna DSR aponta para este dia, forçar 'DSR'
-        if (dsrDia && d === dsrDia && val !== 'DSR') val = 'DSR';
+        // Só preenche com DSR se a célula estiver vazia — respeita X, O, DSR existentes
+        if (dsrDia && d === dsrDia && val === '') val = 'DSR';
         days[d] = val;
       });
       records.push({ nome:nome, turno:turno, pulmao: prod.indexOf('PULM') >= 0, days:days });
@@ -470,18 +470,14 @@ function saveXlsxToFirebase(filename) {
   .catch(function() { setSaveState('error', 'erro ao salvar base'); });
 }
 
-// Salva XLSX completo como base64 no Firebase (chunks de 500KB)
 function saveXlsxB64ToFirebase(b64string, filename) {
-  var CHUNK = 500000;
-  var chunks = [];
+  var CHUNK = 500000; var chunks = [];
   for (var i = 0; i < b64string.length; i += CHUNK) { chunks.push(b64string.slice(i, i + CHUNK)); }
-  fetch(FB_URL + '/xlsxFile.json', {
-    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+  fetch(FB_URL + '/xlsxFile.json', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ filename: filename, chunks: chunks, total: chunks.length, updatedAt: new Date().toISOString() })
   }).then(function() { XLSX_B64 = b64string; }).catch(function(e) { console.warn('Erro XLSX_B64:', e); });
 }
 
-// Carrega XLSX_B64 do Firebase
 function loadXlsxB64FromFirebase(callback) {
   fetch(FB_URL + '/xlsxFile.json', { cache: 'no-cache' })
     .then(function(r) { return r.json(); })
@@ -662,15 +658,15 @@ function selectTurno(t) {
 
 function selectType(type) {
   selectedType = type;
-  ['ALL','X','DSR','SUSP.'].forEach(function(t) {
-    var id = t==='SUSP.'?'btn-SUSP':'btn-'+t;
+  ['ALL','X','DSR','SUSP'].forEach(function(t) {
+    var id = t==='SUSP'?'btn-SUSP':'btn-'+t;
     var el = document.getElementById(id);
     if (!el) return;
     el.classList.remove('active','active-green','active-yellow','active-red');
     if (t===type) {
       if (t==='X') el.classList.add('active-green');
       else if (t==='DSR') el.classList.add('active-yellow');
-      else if (t==='SUSP.') el.classList.add('active-red');
+      else if (t==='SUSP') el.classList.add('active-red');
       else el.classList.add('active');
     }
   });
@@ -758,7 +754,7 @@ function renderPessoas() {
     var estado = presencaMap[key] || { status: null, just: 'Injustificado' };
     var dayVal = p.days[selectedDay]||'';
     var turno  = (p.turno||'').toUpperCase();
-    var tagCls = dayVal==='DSR'?'tag-dsr':dayVal==='SUSP.'?'tag-susp':dayVal==='O'?'tag-o':'tag-x';
+    var tagCls = dayVal==='DSR'?'tag-dsr':dayVal==='SUSP'?'tag-susp':dayVal==='O'?'tag-o':'tag-x';
     var tCls   = turno==='T2'?'tag-t2':turno==='T3'?'tag-t3':'tag-t1';
     var rowCls = turno.toLowerCase();
     if (p.pulmao)            rowCls += ' pulmao-row';
@@ -969,7 +965,6 @@ function syncFromSheets() {
     btn.textContent = '✓ SHEETS';
     setTimeout(function(){ btn.textContent='↓ SHEETS'; },3000);
     saveXlsxToFirebase('google-sheets-sync');
-    // Gerar XLSX a partir dos dados e salvar como Base64 no Firebase
     try {
       var wbNew = XLSX.utils.book_new();
       Object.keys(ESCALA_DATA).forEach(function(sn) {
@@ -977,8 +972,7 @@ function syncFromSheets() {
         var hdr = ['NOME','TURNO','PRODUTIVO ?','SEG','TER','QUA','QUI','SEX','SAB','DOM'];
         var wsd = [hdr];
         rows.forEach(function(p) {
-          wsd.push([p.nome,p.turno,p.pulmao?'PULMÃO':'',
-            p.days.SEG||'',p.days.TER||'',p.days.QUA||'',p.days.QUI||'',p.days.SEX||'',p.days.SAB||'',p.days.DOM||'']);
+          wsd.push([p.nome,p.turno,p.pulmao?'PULMÃO':'',p.days.SEG||'',p.days.TER||'',p.days.QUA||'',p.days.QUI||'',p.days.SEX||'',p.days.SAB||'',p.days.DOM||'']);
         });
         XLSX.utils.book_append_sheet(wbNew, XLSX.utils.aoa_to_sheet(wsd), sn);
       });
