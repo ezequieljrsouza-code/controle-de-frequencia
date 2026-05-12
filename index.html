@@ -834,22 +834,62 @@ function renderStats() {
 }
 
 function gerarRelatorio() {
-  var hoje = new Date().toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' });
+  var hoje = new Date().toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric' });
   var all  = getPessoas();
-  var absN=[],plList=[],plP=0;
+
+  // Detecta turno selecionado
+  var turnoLabel = selectedTurno === 'ALL' ? '' : selectedTurno;
+
+  // Separa pulmões e normais; coleta ausentes
+  var absNormal = [], plList = [], plPresente = 0, plTotal = 0;
+  var hcTotal = 0, hcPresente = 0;
+
   all.forEach(function(p) {
-    var e=presencaMap[p.nome],st=e?e.status:null,just=e?(e.just||'Injustificado'):'Injustificado';
+    var e = presencaMap[p.nome], st = e ? e.status : null;
+    var just = e ? (e.just || 'Injustificado') : 'Injustificado';
+
     if (p.pulmao) {
-      if (st==='A') plList.push('- '+p.nome+' ❌ ('+just+')');
-      else          { plList.push('- '+p.nome+' ✅'); plP++; }
-    } else { if (st==='A') absN.push('- '+p.nome+' ('+just+')'); }
+      plTotal++;
+      if (st === 'A') {
+        plList.push({ nome: p.nome, just: just, presente: false });
+      } else {
+        plPresente++;
+        plList.push({ nome: p.nome, just: just, presente: true });
+      }
+    } else {
+      hcTotal++;
+      if (st === 'A') {
+        absNormal.push('- ' + p.nome.toUpperCase() + ' (' + just.toUpperCase() + ')');
+      } else {
+        hcPresente++;
+      }
+    }
   });
-  var absReal = Math.max(0, absN.length - plP);
-  var r = '*ABS ('+hoje+')*\n\n';
-  r += absN.length  ? absN.join('\n')+'\n'   : 'Nenhum\n';
-  r += '\nPulmões 🫁\n';
-  r += plList.length? plList.join('\n')+'\n' : 'Nenhum\n';
-  r += '\nABS Real: '+absReal;
+
+  var absTotal = absNormal.length;
+  var hcPresenteFinal = hcPresente;
+  var injCount = absNormal.filter(function(x){ return x.indexOf('INJUSTIFICADO') >= 0; }).length;
+
+  // Monta relatório
+  var r = '📋 *CONTROLE DE ABS*\n';
+  if (turnoLabel) r += 'Turno: *' + turnoLabel + '* | ' + hoje + '\n';
+  else r += hoje + '\n';
+
+  r += '\n🚨 *FALTAS REGISTRADAS:*\n';
+  if (absNormal.length > 0) {
+    r += absNormal.join('\n') + '\n';
+  } else {
+    r += '- Nenhuma falta registrada\n';
+  }
+
+  r += '\n📊 *RESUMO:*\n';
+  r += '- HC PREVISTO: ' + hcTotal + '\n';
+  r += '- HC PRESENTE: ' + hcPresenteFinal + '\n';
+  r += '- INJUSTIFICADO: ' + String(injCount).padStart(2,'0') + '\n';
+  r += '- PULMÃO PREVISTO: ' + String(plTotal).padStart(2,'0') + '\n';
+  r += '- PULMÃO PRESENTE: ' + String(plPresente).padStart(2,'0') + '\n';
+  r += '\nABS TOTAL: ' + String(absTotal).padStart(2,'0');
+
   document.getElementById('reportText').textContent = r;
   document.getElementById('reportModal').classList.add('open');
 }
